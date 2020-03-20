@@ -2,7 +2,7 @@ var express = require('express');
 var app     = express();
 var server  = require('http').createServer(app);
 var io      = require('socket.io')(server);
-
+var port = process.env.port || 3000;
 //Add recent chats to messages array
 var messages  = [];
 var prevChats = 10;
@@ -46,6 +46,6 @@ io.on('connection', function(socket){
 });
 
 //Listen at localhost:3000
-server.listen(3000, function(){
+server.listen(port, function(){
   console.log('listening on *:3000');
 });
