@@ -1,28 +1,76 @@
-const express = require('express');
-const app = express();
-const http = require('http').Server(app);
-const io = require('socket.io')(http);
+// Setup basic express server
+var express = require('express');
+var app = express();
+var path = require('path');
+var server = require('http').createServer(app);
+var io = require('../..')(server);
 var port = process.env.PORT || 8080;
-app.get('/', function(req, res) {
-    res.render('index.ejs');
+
+server.listen(port, () => {
+    console.log('Server listening at port %d', port);
 });
 
-io.sockets.on('connection', function(socket) {
-    socket.on('username', function(username) {
+// Routing
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Chatroom
+
+var numUsers = 0;
+
+io.on('connection', (socket) => {
+    var addedUser = false;
+
+    // when the client emits 'new message', this listens and executes
+    socket.on('new message', (data) => {
+        // we tell the client to execute 'new message'
+        socket.broadcast.emit('new message', {
+            username: socket.username,
+            message: data
+        });
+    });
+
+    // when the client emits 'add user', this listens and executes
+    socket.on('add user', (username) => {
+        if (addedUser) return;
+
+        // we store the username in the socket session for this client
         socket.username = username;
-        io.emit('is_online', socket.username + ' join the chat..</i>');
+        ++numUsers;
+        addedUser = true;
+        socket.emit('login', {
+            numUsers: numUsers
+        });
+        // echo globally (all clients) that a person has connected
+        socket.broadcast.emit('user joined', {
+            username: socket.username,
+            numUsers: numUsers
+        });
     });
 
-    socket.on('disconnect', function(username) {
-        io.emit('is_online', socket.username + ' left the chat..</i>');
+    // when the client emits 'typing', we broadcast it to others
+    socket.on('typing', () => {
+        socket.broadcast.emit('typing', {
+            username: socket.username
+        });
     });
 
-    socket.on('chat_message', function(message) {
-        io.emit('chat_message', '<strong>' + socket.username + '</strong>: ' + message);
+    // when the client emits 'stop typing', we broadcast it to others
+    socket.on('stop typing', () => {
+        socket.broadcast.emit('stop typing', {
+            username: socket.username
+        });
     });
 
-});
+    // when the user disconnects.. perform this
+    socket.on('disconnect', () => {
+        if (addedUser) {
+            --numUsers;
 
-const server = http.listen(port, function() {
-    console.log('listening on '+port);
+            // echo globally that this client has left
+            socket.broadcast.emit('user left', {
+                username: socket.username,
+                numUsers: numUsers
+            });
+        }
+    });
 });
